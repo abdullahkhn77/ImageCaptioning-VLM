@@ -1,0 +1,14 @@
+# DVC pipeline configuration
+stages:
+  preprocess:
+    cmd: python src/data_preparation/preprocess.py --data_path data/raw/dataset.json --image_dir data/raw/images --output_dir data/processed
+    deps:
+      - src/data_preparation/preprocess.py
+      - data/raw/dataset.json
+      - data/raw/images
+    outs:
+      - data/processed/train.json
+      - data/processed/val.json
+      - data/processed/test.json
+      - data/processed/metadata.json
+
