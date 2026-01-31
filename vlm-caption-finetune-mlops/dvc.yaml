@@ -1,0 +1,23 @@
+# DVC pipeline for data and model versioning
+# Run: dvc repro  (after dvc pull if data is remote)
+# Add data: dvc add data/raw/your_dataset  then git add data/raw/your_dataset.dvc
+
+stages:
+  prepare_data:
+    cmd: python scripts/prepare_data.py --config-name default
+    deps:
+      - scripts/prepare_data.py
+      - configs/default/dataset.yaml
+      - data/raw
+    outs:
+      - data/processed
+
+  # Optional: add train stage when you want to version training outputs
+  # train:
+  #   cmd: python scripts/train.py --config-name default
+  #   deps:
+  #     - scripts/train.py
+  #     - data/processed
+  #     - configs/default
+  #   outs:
+  #     - outputs/checkpoints

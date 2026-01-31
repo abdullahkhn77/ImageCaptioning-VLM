@@ -1,0 +1,20 @@
+# VLM model configuration
+# Supported: PaliGemma, LLaVA, Qwen2-VL, Llama 3.2 Vision (via HF model ids)
+
+model:
+  name: google/paligemma-3b-pt-224  # or llava-hf/llava-1.5-7b-hf, Qwen/Qwen2-VL-2B-Instruct, etc.
+  revision: main
+  trust_remote_code: true
+  torch_dtype: bfloat16  # or float16, auto
+
+# Processor / tokenizer (often same as model for VLMs)
+processor:
+  name: null  # null = use model name
+  max_length: 512
+  padding: true
+  truncation: true
+
+# Image
+image:
+  size: 224  # or [224, 224]
+  normalize: true

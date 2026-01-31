@@ -1,0 +1,23 @@
+# Dataset configuration: COCO, Flickr8k/30k, or custom (image_path + caption)
+
+dataset:
+  name: coco  # coco | flickr8k | flickr30k | custom
+  split: train
+  eval_split: val
+
+# For custom: path to CSV/JSON with columns image_path, caption
+custom:
+  train_path: data/raw/captions_train.csv
+  eval_path: data/raw/captions_val.csv
+  image_path_column: image_path
+  caption_column: caption
+
+# HF dataset name (when using coco / flickr from HF)
+huggingface_dataset:
+  name: nlpconnect/vit-gpt2-image-captioning  # example; replace with coco/flickr if available
+  config: null
+  subset: null
+
+# Preprocessing
+max_captions_per_image: 1
+max_samples: null  # null = use all
