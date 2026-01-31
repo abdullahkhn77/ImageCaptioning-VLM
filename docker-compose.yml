@@ -1,0 +1,38 @@
+# vlm-caption-finetune-mlops — Docker Compose for training and API
+# Usage: docker-compose up -d api  |  docker-compose run train
+
+services:
+  train:
+    build: .
+    image: vlm-caption-finetune-mlops:latest
+    command: ["python", "scripts/train.py", "--config-name", "default"]
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./configs:/app/configs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - HF_HOME=/app/.cache/huggingface
+
+  api:
+    build: .
+    image: vlm-caption-finetune-mlops:latest
+    command: ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
