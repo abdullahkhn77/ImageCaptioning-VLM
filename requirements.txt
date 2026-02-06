@@ -1,0 +1,23 @@
+# Core ML
+torch>=2.1.0
+torchvision>=0.16.0
+
+# Hugging Face ecosystem
+transformers>=4.36.0
+datasets>=2.16.0
+accelerate>=0.25.0
+peft>=0.7.0
+bitsandbytes>=0.41.0
+
+# Image processing
+Pillow>=10.0.0
+
+# Evaluation
+pycocoevalcap>=1.2
+
+# Experiment tracking
+wandb>=0.16.0
+
+# Utilities
+pyyaml>=6.0
+tqdm>=4.66.0

@@ -1,0 +1,128 @@
+# =============================================================================
+# VLM Fine-Tuning Configuration
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Model
+# -----------------------------------------------------------------------------
+model:
+  # Base model to fine-tune.
+  # Supported options:
+  #   - Salesforce/blip2-opt-2.7b      (BLIP-2 with OPT-2.7B language model)
+  #   - Salesforce/blip2-flan-t5-xl    (BLIP-2 with Flan-T5-XL)
+  #   - llava-hf/llava-1.5-7b-hf      (LLaVA-1.5 7B)
+  #   - llava-hf/llava-1.5-13b-hf     (LLaVA-1.5 13B)
+  #   - microsoft/Florence-2-base      (Florence-2 Base)
+  #   - microsoft/Florence-2-large     (Florence-2 Large)
+  #   - Qwen/Qwen-VL-Chat             (Qwen-VL Chat)
+  name: "Salesforce/blip2-opt-2.7b"
+
+  # Processor / tokenizer (usually same as model name; override if needed)
+  processor: null
+
+  # Whether to freeze the vision encoder during fine-tuning
+  freeze_vision_encoder: true
+
+# -----------------------------------------------------------------------------
+# LoRA (Low-Rank Adaptation)
+# -----------------------------------------------------------------------------
+lora:
+  enabled: true
+  r: 16                    # Rank of the low-rank matrices
+  alpha: 32                # Scaling factor (effective lr ~ alpha / r)
+  dropout: 0.05            # Dropout applied to LoRA layers
+  bias: "none"             # "none", "all", or "lora_only"
+
+  # Modules to apply LoRA to. These are model-specific.
+  # For BLIP-2 OPT: target the OPT attention projections
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+
+  # Task type for PEFT (CAUSAL_LM for decoder-only, SEQ_2_SEQ_LM for enc-dec)
+  task_type: "CAUSAL_LM"
+
+# -----------------------------------------------------------------------------
+# Training
+# -----------------------------------------------------------------------------
+training:
+  output_dir: "outputs/"
+  num_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4    # Effective batch size = 4 * 4 = 16
+
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+  # Learning rate scheduler
+  lr_scheduler_type: "cosine"       # "linear", "cosine", "cosine_with_restarts"
+  warmup_ratio: 0.05                # Fraction of total steps used for warmup
+
+  # Logging & checkpointing
+  logging_steps: 50
+  eval_steps: 500                   # Evaluate every N steps
+  save_steps: 500
+  save_total_limit: 3               # Keep only the N most recent checkpoints
+
+  # Reproducibility
+  seed: 42
+
+  # Early stopping (set patience to 0 to disable)
+  early_stopping_patience: 3
+  early_stopping_metric: "eval_loss"
+
+# -----------------------------------------------------------------------------
+# Hardware / Performance
+# -----------------------------------------------------------------------------
+hardware:
+  fp16: true                        # Use mixed-precision (fp16). Set false for bf16 GPUs.
+  bf16: false                       # Use bf16 instead (A100, H100, etc.)
+  gradient_checkpointing: true      # Trade compute for memory
+  dataloader_num_workers: 4
+  dataloader_pin_memory: true
+
+  # DeepSpeed (provide a path to a ds config, or null to disable)
+  deepspeed_config: null
+
+# -----------------------------------------------------------------------------
+# Data
+# -----------------------------------------------------------------------------
+data:
+  # Paths to annotation JSON files (see data/README.md for expected format)
+  train_annotations: "data/train.json"
+  val_annotations: "data/val.json"
+  test_annotations: "data/test.json"
+
+  # Root directory containing the images referenced in annotation files
+  image_root: "data/images/"
+
+  # Preprocessing
+  max_length: 128                   # Maximum caption token length
+  image_size: 224                   # Resize images to this resolution
+
+# -----------------------------------------------------------------------------
+# Evaluation
+# -----------------------------------------------------------------------------
+evaluation:
+  # Metrics to compute (requires pycocoevalcap)
+  metrics:
+    - "bleu"        # BLEU-1 through BLEU-4
+    - "meteor"
+    - "rouge_l"
+    - "cider"
+    - "spice"
+
+  # Number of beams for caption generation during eval
+  num_beams: 5
+  max_new_tokens: 50
+
+# -----------------------------------------------------------------------------
+# Experiment Tracking (Weights & Biases)
+# -----------------------------------------------------------------------------
+wandb:
+  enabled: false
+  project: "vlm-captioning"
+  entity: null                      # Your W&B username or team name
+  run_name: null                    # Auto-generated if null
