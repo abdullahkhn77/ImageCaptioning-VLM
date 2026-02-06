@@ -90,10 +90,10 @@ hardware:
 # Data
 # -----------------------------------------------------------------------------
 data:
-  # Paths to annotation JSON files (see data/README.md for expected format)
-  train_annotations: "data/train.json"
-  val_annotations: "data/val.json"
-  test_annotations: "data/test.json"
+  # Paths to annotation files (JSON or JSONL — see data/README.md for format)
+  train_annotations: "data/train.jsonl"
+  val_annotations: "data/val.jsonl"
+  test_annotations: "data/test.jsonl"
 
   # Root directory containing the images referenced in annotation files
   image_root: "data/images/"
@@ -101,6 +101,24 @@ data:
   # Preprocessing
   max_length: 128                   # Maximum caption token length
   image_size: 224                   # Resize images to this resolution
+
+  # Augmentation (applied only during training)
+  augmentation:
+    enabled: true
+    random_horizontal_flip: 0.5     # Probability of horizontal flip
+    color_jitter:
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+      hue: 0.05
+    random_resized_crop:
+      enabled: true
+      scale: [0.8, 1.0]            # Crop area range as fraction of original
+
+  # COCO download settings (used by scripts/prepare_data.sh)
+  coco:
+    root: "data/coco"
+    year: 2017
 
 # -----------------------------------------------------------------------------
 # Evaluation

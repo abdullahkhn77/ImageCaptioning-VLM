@@ -1,37 +1,44 @@
 """Fine-tune a Vision-Language Model for image captioning."""
 
+from __future__ import annotations
+
 import argparse
-import json
+import logging
 from pathlib import Path
 
 import torch
 import yaml
-from peft import LoraConfig, get_peft_model, TaskType
+from peft import LoraConfig, TaskType, get_peft_model
 from transformers import (
-    AutoProcessor,
     AutoModelForVision2Seq,
+    EarlyStoppingCallback,
     Trainer,
     TrainingArguments,
-    EarlyStoppingCallback,
 )
 
-from dataset import CaptionDataset
+from dataset import CaptionDataset, build_eval_transforms, build_train_transforms, caption_collate_fn
+from preprocessing import CaptioningProcessor
+
+logger = logging.getLogger(__name__)
 
 
 def load_config(path: str) -> dict:
+    """Load a YAML configuration file."""
     with open(path) as f:
         return yaml.safe_load(f)
 
 
 def build_model(cfg: dict):
+    """Instantiate the VLM and optionally wrap it with LoRA."""
     model_name = cfg["model"]["name"]
-    processor = AutoProcessor.from_pretrained(
-        cfg["model"]["processor"] or model_name
-    )
-    model = AutoModelForVision2Seq.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16 if cfg["hardware"]["fp16"] else torch.float32,
-    )
+
+    dtype = torch.float32
+    if cfg["hardware"]["bf16"]:
+        dtype = torch.bfloat16
+    elif cfg["hardware"]["fp16"]:
+        dtype = torch.float16
+
+    model = AutoModelForVision2Seq.from_pretrained(model_name, torch_dtype=dtype)
 
     if cfg["model"]["freeze_vision_encoder"]:
         for param in model.vision_model.parameters():
@@ -50,30 +57,51 @@ def build_model(cfg: dict):
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()
 
-    return model, processor
+    return model
 
 
-def main():
-    parser = argparse.ArgumentParser()
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    parser = argparse.ArgumentParser(description="Fine-tune a VLM for captioning")
     parser.add_argument("--config", type=str, default="configs/default.yaml")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
-    model, processor = build_model(cfg)
 
+    # ── Processor ───────────────────────────────────────────────────────
+    processor = CaptioningProcessor.from_config(cfg)
+
+    # ── Model ───────────────────────────────────────────────────────────
+    model = build_model(cfg)
+
+    # ── Transforms ──────────────────────────────────────────────────────
+    image_size = cfg["data"]["image_size"]
+    aug_cfg = cfg["data"].get("augmentation", {})
+    train_transforms = (
+        build_train_transforms(aug_cfg, image_size)
+        if aug_cfg.get("enabled", False)
+        else build_eval_transforms(image_size)
+    )
+    eval_transforms = build_eval_transforms(image_size)
+
+    # ── Datasets ────────────────────────────────────────────────────────
     train_dataset = CaptionDataset(
-        cfg["data"]["train_annotations"],
-        cfg["data"]["image_root"],
-        processor,
+        annotations_path=cfg["data"]["train_annotations"],
+        image_root=cfg["data"]["image_root"],
+        processor=processor,
         max_length=cfg["data"]["max_length"],
+        image_transforms=train_transforms,
     )
     val_dataset = CaptionDataset(
-        cfg["data"]["val_annotations"],
-        cfg["data"]["image_root"],
-        processor,
+        annotations_path=cfg["data"]["val_annotations"],
+        image_root=cfg["data"]["image_root"],
+        processor=processor,
         max_length=cfg["data"]["max_length"],
+        image_transforms=eval_transforms,
     )
 
+    # ── Training args ───────────────────────────────────────────────────
     training_args = TrainingArguments(
         output_dir=cfg["training"]["output_dir"],
         num_train_epochs=cfg["training"]["num_epochs"],
@@ -108,17 +136,22 @@ def main():
     if patience > 0:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=patience))
 
+    # ── Trainer ─────────────────────────────────────────────────────────
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
+        data_collator=caption_collate_fn,
         callbacks=callbacks,
     )
 
     trainer.train()
-    trainer.save_model(Path(cfg["training"]["output_dir"]) / "final")
-    processor.save_pretrained(Path(cfg["training"]["output_dir"]) / "final")
+
+    output_dir = Path(cfg["training"]["output_dir"]) / "final"
+    trainer.save_model(output_dir)
+    processor.hf_processor.save_pretrained(output_dir)
+    logger.info("Model and processor saved to %s", output_dir)
 
 
 if __name__ == "__main__":

@@ -18,17 +18,18 @@ Fine-tune Vision-Language Models for image captioning using LoRA and the Hugging
 
 ```
 vlm-captioning/
-  configs/          # YAML training configs
-  data/             # Dataset annotations and images
-  notebooks/        # Jupyter notebooks for exploration
-  outputs/          # Checkpoints and logs (git-ignored)
-  scripts/          # Shell scripts for train / eval / inference
-  src/              # Python source code
-    train.py        # Fine-tuning entry point
-    evaluate.py     # Compute captioning metrics
-    inference.py    # Caption a single image
-    dataset.py      # Dataset class
-    data_utils.py   # Convert COCO / Flickr30k to expected format
+  configs/              # YAML training configs
+  data/                 # Dataset annotations and images
+  notebooks/            # Jupyter notebooks for exploration
+  outputs/              # Checkpoints and logs (git-ignored)
+  scripts/              # Shell scripts for train / eval / inference / data prep
+  src/                  # Python source code
+    train.py            # Fine-tuning entry point
+    evaluate.py         # Compute captioning metrics
+    inference.py        # Caption a single image
+    dataset.py          # CaptionDataset + collate function + transforms
+    preprocessing.py    # CaptioningProcessor (wraps HF AutoProcessor)
+    data_utils.py       # Download, convert, split, validate datasets
 ```
 
 ## Setup
@@ -44,25 +45,61 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Dataset Format
+## Data Pipeline
 
-Annotation files are JSON arrays of objects with `image` and `caption` fields:
-
-```json
-[
-  {"image": "img_001.jpg", "caption": "A dog sitting on a park bench."},
-  {"image": "img_002.jpg", "caption": "An aerial view of a city at sunset."}
-]
-```
-
-Place images under `data/images/` and annotations as `data/train.json`, `data/val.json`, `data/test.json`. See `data/README.md` for full details.
-
-To convert COCO Captions:
+### Quick start with COCO Captions
 
 ```bash
-python src/data_utils.py --format coco \
-    --input /path/to/captions_train2017.json \
-    --output data/train.json
+# Download COCO 2017, convert to JSONL, validate
+bash scripts/prepare_data.sh
+
+# Skip the image download (annotations only)
+bash scripts/prepare_data.sh --skip-images
+```
+
+### Dataset format
+
+Annotation files use **JSONL** (one JSON object per line):
+
+```jsonl
+{"image": "train2017/000000391895.jpg", "caption": "A man on a moped on a dirt road."}
+{"image": "train2017/000000522418.jpg", "caption": "A woman cutting a cake."}
+```
+
+Multi-caption-per-image is supported — see `data/README.md` for full details.
+
+### Converting other datasets
+
+```bash
+# COCO
+python src/data_utils.py convert-coco \
+    --annotation /path/to/captions_train2017.json \
+    --image-dir /path/to/train2017 \
+    --output data/train.jsonl
+
+# Flickr30k
+python src/data_utils.py convert-flickr \
+    --token-file /path/to/results_20130124.token \
+    --output data/flickr30k.jsonl
+```
+
+### Splitting a custom dataset
+
+```bash
+python src/data_utils.py split \
+    --input data/my_dataset.jsonl \
+    --output-dir data/ \
+    --train-ratio 0.8 --val-ratio 0.1 --test-ratio 0.1
+```
+
+All captions for the same image are kept in the same split to avoid leakage.
+
+### Validating
+
+```bash
+python src/data_utils.py validate \
+    --annotations data/train.jsonl \
+    --image-root data/images/
 ```
 
 ## Training
@@ -75,6 +112,8 @@ bash scripts/train.sh configs/custom.yaml   # uses a custom config
 ```
 
 Training uses `accelerate launch` under the hood, so multi-GPU and DeepSpeed are supported via your `accelerate` config.
+
+The `CaptioningProcessor` class handles model-specific prompt formatting automatically (BLIP-2, LLaVA, Florence-2, Qwen-VL).
 
 ## Evaluation
 
@@ -92,14 +131,23 @@ bash scripts/inference.sh path/to/image.jpg outputs/final
 
 Prints the generated caption to stdout.
 
+## Notebooks
+
+| Notebook | Description |
+|----------|-------------|
+| `01_data_exploration.ipynb` | Dataset stats, caption distributions, vocabulary analysis, augmentation previews |
+| `exploration.ipynb` | Model inference playground |
+
 ## Roadmap
 
 - [x] Project scaffolding and config system
-- [x] Dataset loader with JSON annotation format
+- [x] Robust data pipeline (JSONL loader, COCO/Flickr converters, validation)
+- [x] Model-agnostic preprocessing (CaptioningProcessor)
+- [x] Configurable augmentation (crop, flip, color jitter)
 - [x] LoRA-based fine-tuning pipeline
 - [x] Evaluation script with standard captioning metrics
 - [x] Single-image inference script
-- [ ] Add data augmentation options (random crop, color jitter)
+- [x] Data preparation shell script
 - [ ] Support multi-GPU training with FSDP
 - [ ] Add quantized inference (4-bit / 8-bit via bitsandbytes)
 - [ ] Integrate Gradio demo for interactive captioning
